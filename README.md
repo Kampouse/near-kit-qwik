@@ -14,8 +14,8 @@ Qwik-friendly functional wrapper around [near-kit](https://github.com/r-near/nea
 ## Install
 
 ```bash
-npm i github:Kampouse/near-kit-qwik
-# plus its peers, if you don't have them:
+npm i near-kit-qwik
+# peers, if not already present:
 npm i near-kit @hot-labs/near-connect
 ```
 
