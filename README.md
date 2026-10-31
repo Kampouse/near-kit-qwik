@@ -114,3 +114,32 @@ await batch(cfg, [
 ## License
 
 MIT
+
+## Testing against near-mock (no testnet, no funds)
+
+The wrapper accepts a custom network — `{ rpcUrl, networkId }` — so you can point
+the whole frontend at a local deterministic chain:
+
+```ts
+const cfg: NearConfig = { network: { rpcUrl: "http://127.0.0.1:3030", networkId: "mock" } };
+```
+
+Run the shim (Node, zero deps): it speaks the NEAR JSON-RPC subset on :3030 and
+translates view calls into `near-mock` executions of a real contract wasm against
+a local `state.bin`:
+
+```bash
+# 1. capture a contract (mainnet default; testnet needs NEAR_RPC_URL)
+near-mock snapshot wrap.near state.bin
+# (or on testnet: NEAR_RPC_URL=https://rpc.testnet.near.org near-mock snapshot acct.testnet state.bin)
+
+# 2. run the shim
+CONTRACT=wrap.near WASM=wrap.wasm STATE=state.bin node mock/mock-rpc.mjs
+
+# 3. dev against it
+npm run dev
+```
+
+Deterministic: reset = delete the state file or re-snapshot. Signatures are
+ignored (the mock applies calls directly) — test/demo only, never point this at
+real keys. Wallet-signed writes bypass the shim (they go to the wallet's own RPC).

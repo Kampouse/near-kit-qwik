@@ -6,8 +6,12 @@ import { NearConnector } from "@hot-labs/near-connect";
 export type AmountInput = `${number} NEAR` | `${bigint} yocto` | bigint;
 
 // The only thing Qwik ever stores. 100% JSON.
+export type NearNetwork =
+  | "mainnet" | "testnet" | "localnet" | "betanet"
+  | { rpcUrl: string; networkId: string };  // e.g. near-mock shim: { rpcUrl: "http://127.0.0.1:3030", networkId: "mock" }
+
 export interface NearConfig {
-  network: "mainnet" | "testnet";
+  network: NearNetwork;
   accountId?: string;
 }
 
@@ -35,8 +39,22 @@ export type Op =
       deposit?: AmountInput;
     };
 
+export const useMockNetwork = (): NearNetwork => {
+  const env = (globalThis as unknown as { MOCK_RPC_URL?: string }) ?? {};
+  return { rpcUrl: env.MOCK_RPC_URL ?? "http://127.0.0.1:3030", networkId: "mock" };
+};
+
 // Law: every export is a hoisted function, every arg is JSON,
 // the Near instance is born inside the call and never escapes.
+
+function clientOf(cfg: NearConfig, wallet?: unknown): Near {
+  return new Near({
+    // near-kit's zod schema accepts { rpcUrl, networkId } at runtime;
+    // its published TS alias predates that union, so one cast lives here.
+    network: cfg.network as unknown as "mainnet",
+    ...(wallet ? { wallet } : {}),
+  });
+}
 
 // ── free reads (no wallet) ───────────────────────────────────
 
@@ -46,24 +64,34 @@ export const view = async (
   method: string,
   args: object,
 ): Promise<unknown> => {
-  const near = new Near({ network: cfg.network });
+  const near = clientOf(cfg);
   return near.view(contractId, method, args);
 };
 
 export const getBalance = (cfg: NearConfig, accountId: string): Promise<string> =>
-  new Near({ network: cfg.network }).getBalance(accountId);
+  clientOf(cfg).getBalance(accountId);
 
 export const getStatus = (cfg: NearConfig) =>
-  new Near({ network: cfg.network }).getStatus();
+  clientOf(cfg).getStatus();
 
 export const accountExists = (cfg: NearConfig, accountId: string): Promise<boolean> =>
-  new Near({ network: cfg.network }).accountExists(accountId);
+  clientOf(cfg).accountExists(accountId);
 
 // ── wallet session (JSON in, accountId out) ──────────────────
 
+function connectorOf(cfg: NearConfig): NearConnector {
+  return new NearConnector({
+    network: cfg.network as unknown as "mainnet",
+  });
+}
+
+function walletNear(cfg: NearConfig): Near {
+  return clientOf(cfg, fromNearConnect(connectorOf(cfg)));
+}
+
 /** Opens the wallet selector. Resolves to the accountId to store. */
 export const connect = async (cfg: NearConfig): Promise<string> => {
-  const connector = new NearConnector({ network: cfg.network });
+  const connector = connectorOf(cfg);
   await connector.connect();
   const { accounts } = await connector.getConnectedWallet();
   return accounts[0]?.accountId ?? "";
@@ -72,8 +100,7 @@ export const connect = async (cfg: NearConfig): Promise<string> => {
 /** Restores the session after a page reload. Null if not connected. */
 export const getSession = async (cfg: NearConfig): Promise<string | null> => {
   try {
-    const connector = new NearConnector({ network: cfg.network });
-    const { accounts } = await connector.getConnectedWallet();
+    const { accounts } = await connectorOf(cfg).getConnectedWallet();
     return accounts[0]?.accountId ?? null;
   } catch {
     return null;
@@ -83,8 +110,7 @@ export const getSession = async (cfg: NearConfig): Promise<string | null> => {
 /** Disconnects the wallet. Boolean = cleanly disconnected. */
 export const disconnect = async (cfg: NearConfig): Promise<boolean> => {
   try {
-    const connector = new NearConnector({ network: cfg.network });
-    await connector.disconnect();
+    await connectorOf(cfg).disconnect();
     return true;
   } catch {
     return false;
@@ -109,11 +135,7 @@ export const signMessage = async (
   const nonce = new Uint8Array(
     (args.nonceHex.match(/../g) ?? []).map((h) => parseInt(h, 16)),
   );
-  const connector = new NearConnector({ network: cfg.network });
-  const near = new Near({
-    network: cfg.network,
-    wallet: fromNearConnect(connector),
-  });
+  const near = clientOf(cfg, fromNearConnect(connectorOf(cfg)));
   const signed = (await near.signMessage({
     message: args.message,
     recipient: args.recipient,
@@ -134,14 +156,6 @@ function hexOf(sig: unknown): string {
 }
 
 // ── transactions ─────────────────────────────────────────────
-
-function walletNear(cfg: NearConfig): Near {
-  const connector = new NearConnector({ network: cfg.network });
-  return new Near({
-    network: cfg.network,
-    wallet: fromNearConnect(connector),
-  });
-}
 
 export const call = async (
   cfg: NearConfig,
