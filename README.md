@@ -108,7 +108,7 @@ await batch(cfg, [
 ## Verified against
 
 - Qwik 1.20.3 (`vite preview` SSR, resumability on)
-- near-kit 0.20.2 / @hot-labs/near-connect
+- near-kit >=0.20.2 (uses fromNearConnect, not the deprecated fromHotConnect alias) / @hot-labs/near-connect
 - NEAR testnet: `getBalance` + `ft_balance_of` live through the full SSR → serialize → resume path
 
 ## License

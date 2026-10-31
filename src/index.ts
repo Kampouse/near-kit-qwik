@@ -1,4 +1,4 @@
-import { Near, fromHotConnect } from "near-kit";
+import { Near, fromNearConnect } from "near-kit";
 import { NearConnector } from "@hot-labs/near-connect";
 
 // Structurally identical to near-kit's internal AmountInput
@@ -112,7 +112,7 @@ export const signMessage = async (
   const connector = new NearConnector({ network: cfg.network });
   const near = new Near({
     network: cfg.network,
-    wallet: fromHotConnect(connector),
+    wallet: fromNearConnect(connector),
   });
   const signed = (await near.signMessage({
     message: args.message,
@@ -139,7 +139,7 @@ function walletNear(cfg: NearConfig): Near {
   const connector = new NearConnector({ network: cfg.network });
   return new Near({
     network: cfg.network,
-    wallet: fromHotConnect(connector),
+    wallet: fromNearConnect(connector),
   });
 }
 
