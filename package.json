@@ -1,7 +1,7 @@
 {
   "name": "near-kit-qwik",
-  "version": "0.1.0",
-  "description": "Qwik-friendly functional wrapper around near-kit — hoisted functions, JSON-only state, zero class instances across serialization boundaries",
+  "version": "0.2.0",
+  "description": "Qwik-friendly functional wrapper around near-kit \u2014 hoisted functions, JSON-only state, zero class instances across serialization boundaries",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

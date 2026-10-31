@@ -68,9 +68,30 @@ export const SwapCard = component$(() => {
 | `view` | `(cfg, contractId, method, args)` | no — free RPC read |
 | `call` | `(cfg, contractId, method, args, { attachedDeposit? })` | yes |
 | `send` | `(cfg, to, amount: AmountInput)` | yes |
+| `batch` | `(cfg, ops: Op[])` — atomic multi-action tx | yes |
 | `getBalance` | `(cfg, accountId)` | no |
 | `getStatus` | `(cfg)` | no |
+| `accountExists` | `(cfg, accountId)` | no |
 | `connect` | `(cfg) → Promise<accountId>` | opens wallet selector |
+| `getSession` | `(cfg) → Promise<accountId \| null>` — restore after reload | reads session |
+| `disconnect` | `(cfg) → Promise<boolean>` | closes session |
+| `signMessage` | `(cfg, { message, recipient, nonceHex })` — NEP-413 gasless auth | yes |
+| `newNonce` | `() → 64-char hex` — build NEP-413 nonces in stores | no |
+
+Session-restore pattern (call in `useVisibleTask$`):
+
+```tsx
+useVisibleTask$(() => { cfg.accountId = await getSession(cfg) ?? cfg.accountId; });
+```
+
+Batch example (all ops atomic — one signature, all-or-nothing):
+
+```ts
+await batch(cfg, [
+  { kind: "transfer", to: "bob.near", amount: "1 NEAR" },
+  { kind: "call", contract: "pool.near", method: "swap", args: { amount_in: "1" }, deposit: "1 NEAR" },
+]);
+```
 
 `AmountInput` = `` `${number} NEAR` `` | `` `${bigint} yocto` `` | `bigint` (mirrors near-kit's internal type, which isn't re-exported as of 0.20.2).
 
