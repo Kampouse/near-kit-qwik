@@ -29,6 +29,8 @@ export interface SignedMessage {
 }
 
 // JSON-safe action list for atomic multi-action transactions.
+// Serialization law: bytes never cross the Qwik boundary — wasm code rides
+// codeB64 and is decoded at the builder edge (Uint8Array dies over JSON).
 export type Op =
   | { kind: "transfer"; to: string; amount: AmountInput }
   | {
@@ -37,7 +39,15 @@ export type Op =
       method: string;
       args: object;
       deposit?: AmountInput;
-    };
+      /** human gas, e.g. "300 Tgas" — ft_transfer_call legs need ≥285 Tgas */
+      gas?: string;
+    }
+  | { kind: "createAccount"; accountId: string }
+  | { kind: "deployContract"; accountId: string; codeB64: string }
+  | { kind: "publishContract"; codeB64: string; mode: "hash" | "account" }
+  | { kind: "useGlobalContract"; accountId?: string; codeHash?: string }
+  | { kind: "addKey"; publicKey: string }
+  | { kind: "deleteKey"; publicKey: string };
 
 export const useMockNetwork = (): NearNetwork => {
   const env = (globalThis as unknown as { MOCK_RPC_URL?: string }) ?? {};
@@ -171,6 +181,14 @@ export const send = async (
   amount: AmountInput,
 ): Promise<unknown> => walletNear(cfg).send(to, amount);
 
+/** Decode base64 → bytes at the builder edge (JSON-safe code transport). */
+function bytesOf(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
 /**
  * Atomic multi-action transaction from a JSON op list.
  * All ops succeed or the whole batch reverts.
@@ -180,12 +198,36 @@ export const batch = async (cfg: NearConfig, ops: Op[]): Promise<unknown> => {
   const near = walletNear(cfg);
   let tx = near.transaction(cfg.accountId);
   for (const op of ops) {
-    if (op.kind === "transfer") {
-      tx = tx.transfer(op.to, op.amount);
-    } else {
-      tx = tx.functionCall(op.contract, op.method, op.args, {
-        attachedDeposit: op.deposit ?? ("0 yocto" as AmountInput),
-      });
+    switch (op.kind) {
+      case "transfer":
+        tx = tx.transfer(op.to, op.amount);
+        break;
+      case "call":
+        tx = tx.functionCall(op.contract, op.method, op.args, {
+          attachedDeposit: op.deposit ?? ("0 yocto" as AmountInput),
+          ...(op.gas ? ({ gas: op.gas } as object) : {}),
+        });
+        break;
+      case "createAccount":
+        tx = tx.createAccount(op.accountId);
+        break;
+      case "deployContract":
+        tx = tx.deployContract(op.accountId, bytesOf(op.codeB64));
+        break;
+      case "publishContract":
+        tx = tx.publishContract(bytesOf(op.codeB64), { identifiedBy: op.mode });
+        break;
+      case "useGlobalContract":
+        tx = tx.deployFromPublished(
+          op.accountId ? { accountId: op.accountId } : { codeHash: op.codeHash ?? "" },
+        );
+        break;
+      case "addKey":
+        tx = tx.addKey(op.publicKey, { type: "fullAccess" });
+        break;
+      case "deleteKey":
+        tx = tx.deleteKey(cfg.accountId, op.publicKey);
+        break;
     }
   }
   return tx.send();
