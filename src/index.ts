@@ -37,6 +37,8 @@ export type Op =
       method: string;
       args: object;
       deposit?: AmountInput;
+      /** human gas, e.g. "300 Tgas" — ft_transfer_call legs need ≥285 Tgas */
+      gas?: string;
     };
 
 export const useMockNetwork = (): NearNetwork => {
@@ -185,6 +187,7 @@ export const batch = async (cfg: NearConfig, ops: Op[]): Promise<unknown> => {
     } else {
       tx = tx.functionCall(op.contract, op.method, op.args, {
         attachedDeposit: op.deposit ?? ("0 yocto" as AmountInput),
+        ...(op.gas ? ({ gas: op.gas } as object) : {}),
       });
     }
   }
