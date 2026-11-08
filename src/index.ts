@@ -13,7 +13,39 @@ export type NearNetwork =
 export interface NearConfig {
   network: NearNetwork;
   accountId?: string;
+  /**
+   * Register the loopback agent wallet ("Local Keys (agent)") before opening
+   * the connect modal. The signer daemon (near-agent-wallet, 127.0.0.1:8391)
+   * signs with local keys — no extension, no human confirmation. Desktop-only.
+   */
+  agentWallet?: boolean;
 }
+
+/** manifest for the near-agent-wallet loopback signer (registerWallet before connect) */
+const AGENT_WALLET_MANIFEST = {
+  id: "local-keys",
+  name: "Local Keys (agent)",
+  description: "Signs with keys on this machine via the local agent wallet daemon",
+  icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230a0c10'/><text x='16' y='22' font-size='16' text-anchor='middle' fill='%233dd68c' font-family='monospace'>k</text></svg>",
+  website: "http://127.0.0.1:8391",
+  version: "1.0.0",
+  type: "sandbox",
+  platform: [],
+  executor: "http://127.0.0.1:8391/executor.js",
+  permissions: { storage: true, allowsOpen: ["http://127.0.0.1:8391"] },
+  features: {
+    signMessage: false,
+    signTransaction: true,
+    signAndSendTransaction: true,
+    signAndSendTransactions: true,
+    signInWithoutAddKey: true,
+    signInAndSignMessage: false,
+    signInWithFunctionCallKey: false,
+    signDelegateActions: false,
+    mainnet: false,
+    testnet: true,
+  },
+};
 
 // JSON-safe NEP-413 nonce: 32 bytes as 64 hex chars (use newNonce()).
 export interface SignMessageArgs {
@@ -102,6 +134,14 @@ function walletNear(cfg: NearConfig): Near {
 /** Opens the wallet selector. Resolves to the accountId to store. */
 export const connect = async (cfg: NearConfig): Promise<string> => {
   const connector = connectorOf(cfg);
+  if (cfg.agentWallet) {
+    try {
+      await connector.registerWallet(AGENT_WALLET_MANIFEST as Parameters<typeof connector.registerWallet>[0]);
+    } catch {
+      // already registered (repeat connect) or manifest type drift — the row
+      // is in the modal either way; never block the connect flow on this
+    }
+  }
   await connector.connect();
   const { accounts } = await connector.getConnectedWallet();
   return accounts[0]?.accountId ?? "";
